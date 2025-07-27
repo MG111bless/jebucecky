@@ -108,42 +108,58 @@ local SendWebhook = function(Id, pt, sh)
     end
 end
 
-local previousPetData = {}
+local previousHugeCount = 0
+local previousTitanicCount = 0
+local previousGargantuanCount = 0
 
-local function getCurrentRarePets()
+local function getRarePetCounts()
     local currentSave = require(ReplicatedStorage.Library.Client.Save).Get()
-    local rarePets = {}
+    local hugeCount, titanicCount, gargantuanCount = 0, 0, 0
+    local lastHuge, lastTitanic, lastGargantuan = nil, nil, nil
     
     if currentSave and currentSave.Inventory and currentSave.Inventory.Pet then
-        for uid, petData in pairs(currentSave.Inventory.Pet) do
-            if string.find(petData.id, "Huge") or string.find(petData.id, "Titanic") or string.find(petData.id, "Gargantuan") then
-                rarePets[uid] = {
-                    id = petData.id,
-                    pt = petData.pt,
-                    sh = petData.sh
-                }
+        for _, itemdata in pairs(currentSave.Inventory.Pet) do
+            if string.find(itemdata.id, "Huge") then 
+                hugeCount = hugeCount + 1 
+                lastHuge = itemdata
+            end
+            if string.find(itemdata.id, "Titanic") then 
+                titanicCount = titanicCount + 1 
+                lastTitanic = itemdata
+            end
+            if string.find(itemdata.id, "Gargantuan") then 
+                gargantuanCount = gargantuanCount + 1 
+                lastGargantuan = itemdata
             end
         end
     end
     
-    return rarePets
+    return hugeCount, titanicCount, gargantuanCount, lastHuge, lastTitanic, lastGargantuan
 end
 
-previousPetData = getCurrentRarePets()
+previousHugeCount, previousTitanicCount, previousGargantuanCount = getRarePetCounts()
 
 task.spawn(function()
     while true do
         task.wait(5)
         pcall(function()
-            local currentPetData = getCurrentRarePets()
-
-            for uid, petInfo in pairs(currentPetData) do
-                if not previousPetData[uid] then
-                    SendWebhook(petInfo.id, petInfo.pt, petInfo.sh)
-                end
+            local hugeCount, titanicCount, gargantuanCount, lastHuge, lastTitanic, lastGargantuan = getRarePetCounts()
+            
+            if hugeCount > previousHugeCount and lastHuge then
+                SendWebhook(lastHuge.id, lastHuge.pt, lastHuge.sh)
             end
-
-            previousPetData = currentPetData
+            
+            if titanicCount > previousTitanicCount and lastTitanic then
+                SendWebhook(lastTitanic.id, lastTitanic.pt, lastTitanic.sh)
+            end
+            
+            if gargantuanCount > previousGargantuanCount and lastGargantuan then
+                SendWebhook(lastGargantuan.id, lastGargantuan.pt, lastGargantuan.sh)
+            end
+            
+            previousHugeCount = hugeCount
+            previousTitanicCount = titanicCount
+            previousGargantuanCount = gargantuanCount
         end)
     end
 end)
