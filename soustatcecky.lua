@@ -10,6 +10,9 @@ local Library = ReplicatedStorage.Library
 local Client = Library.Client
 local ExistCmds = require(Client.ExistCountCmds)
 local SaveMod = require(Client.Save)
+local Network = require(Client.Network)
+
+local StoredUIDs = {}
 
 local Formatint = function(int)
     local Suffix = {"", "k", "M", "B", "T", "Qd", "Qn", "Sx", "Sp", "Oc", "No", "De", "UDe", "DDe", "TDe", "QdDe", "QnDe", "SxDe", "SpDe", "OcDe", "NoDe", "Vg", "UVg", "DVg", "TVg", "QdVg", "QnVg", "SxVg", "SpVg", "OcVg", "NoVg", "Tg", "UTg", "DTg", "TTg", "QdTg", "QnTg", "SxTg", "SpTg", "OcTg", "NoTg", "QdAg", "QnAg", "SxAg", "SpAg", "OcAg", "NoAg", "e141", "e144", "e147", "e150", "e153", "e156", "e159", "e162", "e165", "e168", "e171", "e174", "e177", "e180", "e183", "e186", "e189", "e192", "e195", "e198", "e201", "e204", "e207", "e210", "e213", "e216", "e219", "e222", "e225", "e228", "e231", "e234", "e237", "e240", "e243", "e246", "e249", "e252", "e255", "e258", "e261", "e264", "e267", "e270", "e273", "e276", "e279", "e282", "e285", "e288", "e291", "e294", "e297", "e300", "e303"}
@@ -108,58 +111,21 @@ local SendWebhook = function(Id, pt, sh)
     end
 end
 
-local previousHugeCount = 0
-local previousTitanicCount = 0
-local previousGargantuanCount = 0
-
-local function getRarePetCounts()
-    local currentSave = require(ReplicatedStorage.Library.Client.Save).Get()
-    local hugeCount, titanicCount, gargantuanCount = 0, 0, 0
-    local lastHuge, lastTitanic, lastGargantuan = nil, nil, nil
-    
-    if currentSave and currentSave.Inventory and currentSave.Inventory.Pet then
-        for _, itemdata in pairs(currentSave.Inventory.Pet) do
-            if string.find(itemdata.id, "Huge") then 
-                hugeCount = hugeCount + 1 
-                lastHuge = itemdata
-            end
-            if string.find(itemdata.id, "Titanic") then 
-                titanicCount = titanicCount + 1 
-                lastTitanic = itemdata
-            end
-            if string.find(itemdata.id, "Gargantuan") then 
-                gargantuanCount = gargantuanCount + 1 
-                lastGargantuan = itemdata
-            end
-        end
+-- Store all existing huge/titanic/gargantuan UIDs at startup
+for uid, petData in pairs(SaveMod.Get()['Inventory']['Pet'] or {}) do
+    if (string.find(petData.id, "Huge") or string.find(petData.id, "Titanic") or string.find(petData.id, "Gargantuan")) then
+        StoredUIDs[uid] = true
     end
-    
-    return hugeCount, titanicCount, gargantuanCount, lastHuge, lastTitanic, lastGargantuan
 end
 
-previousHugeCount, previousTitanicCount, previousGargantuanCount = getRarePetCounts()
-
-task.spawn(function()
-    while true do
-        task.wait(5)
-        pcall(function()
-            local hugeCount, titanicCount, gargantuanCount, lastHuge, lastTitanic, lastGargantuan = getRarePetCounts()
-            
-            if hugeCount > previousHugeCount and lastHuge then
-                SendWebhook(lastHuge.id, lastHuge.pt, lastHuge.sh)
+-- Listen for inventory updates
+Network.Fired("Items: Update"):Connect(function(_, Inventory)
+    if Inventory["set"] and Inventory["set"]["Pet"] then
+        for uid, petData in pairs(Inventory["set"]["Pet"]) do
+            if (string.find(petData.id, "Huge") or string.find(petData.id, "Titanic") or string.find(petData.id, "Gargantuan")) and not StoredUIDs[uid] then
+                SendWebhook(petData.id, petData.pt, petData.sh)
+                StoredUIDs[uid] = true
             end
-            
-            if titanicCount > previousTitanicCount and lastTitanic then
-                SendWebhook(lastTitanic.id, lastTitanic.pt, lastTitanic.sh)
-            end
-            
-            if gargantuanCount > previousGargantuanCount and lastGargantuan then
-                SendWebhook(lastGargantuan.id, lastGargantuan.pt, lastGargantuan.sh)
-            end
-            
-            previousHugeCount = hugeCount
-            previousTitanicCount = titanicCount
-            previousGargantuanCount = gargantuanCount
-        end)
+        end
     end
 end)
